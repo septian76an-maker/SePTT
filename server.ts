@@ -31,12 +31,24 @@ async function startServer() {
 
       if (docSnap.exists()) {
         const data = docSnap.data();
+        let token = undefined;
+        if (data.isActive) {
+          const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
+          const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
+          const at = new AccessToken(apiKey, apiSecret, {
+            identity: `device-${deviceId}`,
+          });
+          at.addGrant({ roomJoin: true, room: `room-${deviceId}` });
+          token = await at.toJwt();
+        }
+
         return res.json({ 
           message: "Device already registered", 
           deviceId,
           activationCode: data.activationCode,
           isActive: data.isActive,
-          assignedServerUrl: data.assignedServerUrl
+          assignedServerUrl: data.assignedServerUrl,
+          ...(token && { token })
         });
       }
 
@@ -77,11 +89,23 @@ async function startServer() {
       }
       
       const data = docSnap.data();
+      let token = undefined;
+      if (data.isActive) {
+        const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
+        const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
+        const at = new AccessToken(apiKey, apiSecret, {
+          identity: `device-${deviceId}`,
+        });
+        at.addGrant({ roomJoin: true, room: `room-${deviceId}` });
+        token = await at.toJwt();
+      }
+
       res.json({
         deviceId,
         isActive: data.isActive,
         assignedServerUrl: data.assignedServerUrl || "",
-        activationCode: data.activationCode
+        activationCode: data.activationCode,
+        ...(token && { token })
       });
     } catch (error) {
       console.error("Error fetching device status:", error);
