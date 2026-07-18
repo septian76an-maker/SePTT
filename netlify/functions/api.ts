@@ -15,6 +15,11 @@ router.use((req, res, next) => {
   next();
 });
 
+// Root route for debugging
+router.get("/", (req, res) => {
+  res.json({ message: "API is running!", path: req.path, url: req.url });
+});
+
 // API Route to register a new device from Android App
 router.post("/devices/register", async (req, res) => {
   const { deviceId } = req.body;
@@ -117,11 +122,13 @@ router.post("/livekit/token", async (req, res) => {
   }
 });
 
-// Mount the router at the base path for Netlify Functions (which will be /api mapped by redirect)
-// But since the redirect drops the `/api` prefix or maps `/api/*` to `/.netlify/functions/api/*`,
-// The router itself will just receive the paths after `/api`. 
-// Wait, the redirect `from = "/api/*" to = "/.netlify/functions/api/:splat"` is better, 
-// OR just mount it on the router. Let's make sure it handles both.
+// Catch-all route to debug path mismatch
+router.all("*", (req, res) => {
+  res.status(404).json({ error: "Route not found in API router", originalUrl: req.originalUrl, path: req.path, url: req.url });
+});
+
+// Add explicit route for Netlify
+api.use("/.netlify/functions/api", router);
 api.use("/api/", router);
 // And also at root just in case the rewrite passes the full path or strips it.
 api.use("/", router);
