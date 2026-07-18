@@ -1,0 +1,6 @@
+{
+  "name": "SePTT",
+  "description": "Fungsi TypeScript dan struktur JSON untuk menyimpan data perangkat ke Firebase Firestore.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
