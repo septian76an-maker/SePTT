@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Cpu, Server, Loader2, CheckCircle2 } from 'lucide-react';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { Cpu, Server, Loader2, CheckCircle2, Link2, AlertCircle } from 'lucide-react';
+import { collection, query, where, onSnapshot, Timestamp, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Device } from '../types';
 
 export function Overview() {
   const [devices, setDevices] = useState<Device[]>([]);
+  const [availableServers, setAvailableServers] = useState<{id: string, name: string, url: string}[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [errorId, setErrorId] = useState<string | null>(null);
 
   useEffect(() => {
     // Query devices that are active
@@ -35,8 +38,47 @@ export function Overview() {
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    // Query available servers
+    const qServers = query(collection(db, 'servers'), orderBy('createdAt', 'desc'));
+    const unsubscribeServers = onSnapshot(qServers, (querySnapshot) => {
+      const serversData: {id: string, name: string, url: string}[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.url) {
+          serversData.push({
+            id: docSnap.id,
+            name: data.name || 'Unnamed',
+            url: data.url
+          });
+        }
+      });
+      setAvailableServers(serversData);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeServers();
+    };
   }, []);
+
+  const handleUrlChange = async (deviceId: string, newUrl: string) => {
+    if (!newUrl) return;
+    
+    setUpdatingId(deviceId);
+    setErrorId(null);
+    
+    try {
+      const deviceRef = doc(db, 'devices', deviceId);
+      await updateDoc(deviceRef, {
+        assignedServerUrl: newUrl
+      });
+    } catch (error) {
+      console.error("Gagal mengubah server:", error);
+      setErrorId(deviceId);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -105,9 +147,46 @@ export function Overview() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                        {device.assignedServerUrl}
-                      </span>
+                      <div className="relative max-w-[200px]">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Link2 className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <select
+                          value={device.assignedServerUrl}
+                          onChange={(e) => handleUrlChange(device.id, e.target.value)}
+                          disabled={updatingId === device.id}
+                          className={`block w-full pl-9 pr-8 py-1.5 sm:text-xs rounded-lg border focus:ring-2 focus:outline-none transition-all bg-gray-50 dark:bg-gray-700 appearance-none ${
+                            errorId === device.id 
+                              ? 'border-red-300 text-red-900 dark:text-red-400 focus:ring-red-500 focus:border-red-500'
+                              : 'border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500'
+                          } ${updatingId === device.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <option value="" disabled>Pilih Server LiveKit</option>
+                          {availableServers.map(server => (
+                            <option key={server.id} value={server.url}>
+                              {server.name}
+                            </option>
+                          ))}
+                        </select>
+                        {updatingId === device.id && (
+                          <div className="absolute inset-y-0 right-6 pr-1 flex items-center pointer-events-none">
+                            <Loader2 className="h-3 w-3 text-indigo-500 animate-spin" />
+                          </div>
+                        )}
+                        {errorId === device.id && (
+                          <div className="absolute inset-y-0 right-6 pr-1 flex items-center pointer-events-none">
+                            <AlertCircle className="h-3 w-3 text-red-500" />
+                          </div>
+                        )}
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                      </div>
+                      {errorId === device.id && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                          Gagal mengubah server.
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
