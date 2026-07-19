@@ -35,13 +35,29 @@ router.post("/devices/register", async (req, res) => {
     if (docSnap.exists()) {
       const data = docSnap.data();
       let token = undefined;
+      let roomName = `room-${deviceId}`;
+      let channelName = "Utama";
+
       if (data.isActive) {
+        if (data.groupId) {
+          const groupRef = doc(db, "groups", data.groupId);
+          const groupSnap = await getDoc(groupRef);
+          if (groupSnap.exists()) {
+            const groupData = groupSnap.data();
+            roomName = `group-${data.groupId}`;
+            channelName = groupData.name || "Tanpa Nama";
+          } else {
+            roomName = `group-${data.groupId}`;
+            channelName = "Grup Tidak Dikenal";
+          }
+        }
+
         const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
         const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
         const at = new AccessToken(apiKey, apiSecret, {
           identity: `device-${deviceId}`,
         });
-        at.addGrant({ roomJoin: true, room: `room-${deviceId}` });
+        at.addGrant({ roomJoin: true, room: roomName });
         token = await at.toJwt();
       }
 
@@ -51,6 +67,10 @@ router.post("/devices/register", async (req, res) => {
         activationCode: data.activationCode,
         isActive: data.isActive,
         assignedServerUrl: data.assignedServerUrl,
+        groupId: data.groupId || "",
+        groupName: channelName,
+        channelName: channelName,
+        roomName: roomName,
         ...(token && { token })
       });
     }
@@ -93,13 +113,29 @@ router.get("/devices/:deviceId/status", async (req, res) => {
     
     const data = docSnap.data();
     let token = undefined;
+    let roomName = `room-${deviceId}`;
+    let channelName = "Utama";
+
     if (data.isActive) {
+      if (data.groupId) {
+        const groupRef = doc(db, "groups", data.groupId);
+        const groupSnap = await getDoc(groupRef);
+        if (groupSnap.exists()) {
+          const groupData = groupSnap.data();
+          roomName = `group-${data.groupId}`;
+          channelName = groupData.name || "Tanpa Nama";
+        } else {
+          roomName = `group-${data.groupId}`;
+          channelName = "Grup Tidak Dikenal";
+        }
+      }
+
       const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
       const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
       const at = new AccessToken(apiKey, apiSecret, {
         identity: `device-${deviceId}`,
       });
-      at.addGrant({ roomJoin: true, room: `room-${deviceId}` });
+      at.addGrant({ roomJoin: true, room: roomName });
       token = await at.toJwt();
     }
 
@@ -108,6 +144,10 @@ router.get("/devices/:deviceId/status", async (req, res) => {
       isActive: data.isActive,
       assignedServerUrl: data.assignedServerUrl || "",
       activationCode: data.activationCode,
+      groupId: data.groupId || "",
+      groupName: channelName,
+      channelName: channelName,
+      roomName: roomName,
       ...(token && { token })
     });
   } catch (error) {
