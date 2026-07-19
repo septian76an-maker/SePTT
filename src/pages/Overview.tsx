@@ -1,15 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Cpu, Server, Loader2, CheckCircle2, Link2, AlertCircle } from 'lucide-react';
+import { Cpu, Server, Loader2, CheckCircle2, Link2, AlertCircle, Folder } from 'lucide-react';
 import { collection, query, where, onSnapshot, Timestamp, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Device } from '../types';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { AlertModal } from '../components/AlertModal';
 
 export function Overview() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [availableServers, setAvailableServers] = useState<{id: string, name: string, url: string}[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<{id: string, name: string}[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
+  const [updatingGroupId, setUpdatingGroupId] = useState<string | null>(null);
+  const [groupErrorId, setGroupErrorId] = useState<string | null>(null);
+
+  // States for custom modals
+  const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
+  const [alertInfo, setAlertInfo] = useState<{isOpen: boolean, title: string, message: string, type: 'success' | 'error' | 'info'} | null>(null);
 
   useEffect(() => {
     // Query devices that are active
@@ -27,6 +36,7 @@ export function Overview() {
           activationCode: data.activationCode || '',
           isActive: data.isActive || false,
           assignedServerUrl: data.assignedServerUrl || '',
+          groupId: data.groupId || '',
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
           activatedAt: data.activatedAt instanceof Timestamp ? data.activatedAt.toDate() : undefined,
         });
@@ -55,9 +65,26 @@ export function Overview() {
       setAvailableServers(serversData);
     });
 
+    // Query available groups
+    const qGroups = query(collection(db, 'groups'), orderBy('createdAt', 'desc'));
+    const unsubscribeGroups = onSnapshot(qGroups, (querySnapshot) => {
+      const groupsData: {id: string, name: string}[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        groupsData.push({
+          id: docSnap.id,
+          name: data.name || 'Tanpa Nama',
+        });
+      });
+      setAvailableGroups(groupsData);
+    }, (error) => {
+      console.error("Error fetching groups for overview: ", error);
+    });
+
     return () => {
       unsubscribe();
       unsubscribeServers();
+      unsubscribeGroups();
     };
   }, []);
 
@@ -80,6 +107,47 @@ export function Overview() {
     }
   };
 
+  const handleGroupChange = async (deviceId: string, newGroupId: string) => {
+    setUpdatingGroupId(deviceId);
+    setGroupErrorId(null);
+    
+    try {
+      const deviceRef = doc(db, 'devices', deviceId);
+      await updateDoc(deviceRef, {
+        groupId: newGroupId
+      });
+    } catch (error) {
+      console.error("Gagal mengubah group:", error);
+      setGroupErrorId(deviceId);
+    } finally {
+      setUpdatingGroupId(null);
+    }
+  };
+
+  const handleDeactivate = async (deviceId: string) => {
+    setConfirmDeactivateId(null);
+    try {
+      const deviceRef = doc(db, 'devices', deviceId);
+      await updateDoc(deviceRef, {
+        isActive: false
+      });
+      setAlertInfo({
+        isOpen: true,
+        title: 'Berhasil',
+        message: `Perangkat "${deviceId}" berhasil dinonaktifkan.`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error("Gagal menonaktifkan perangkat:", error);
+      setAlertInfo({
+        isOpen: true,
+        title: 'Gagal',
+        message: 'Gagal menonaktifkan perangkat.',
+        type: 'error'
+      });
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div>
@@ -98,6 +166,9 @@ export function Overview() {
                   Device ID & Kode
                 </th>
                 <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                  Group
+                </th>
+                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
                   Waktu Aktivasi
                 </th>
                 <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
@@ -111,14 +182,14 @@ export function Overview() {
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                     <Loader2 className="mx-auto h-8 w-8 text-indigo-500 animate-spin mb-3" />
                     <p className="text-base font-medium text-gray-900 dark:text-white">Memuat data...</p>
                   </td>
                 </tr>
               ) : devices.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                     <Server className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
                     <p className="text-base font-medium text-gray-900 dark:text-white">Belum ada perangkat aktif</p>
                     <p className="text-sm">Silakan aktivasi perangkat dari menu Perangkat Tertunda.</p>
@@ -137,6 +208,48 @@ export function Overview() {
                           <div className="text-sm text-gray-500 dark:text-gray-400 font-mono mt-0.5">Kode: {device.activationCode}</div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="relative max-w-[180px]">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Folder className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <select
+                          value={device.groupId || ''}
+                          onChange={(e) => handleGroupChange(device.id, e.target.value)}
+                          disabled={updatingGroupId === device.id}
+                          className={`block w-full pl-9 pr-8 py-1.5 sm:text-xs rounded-lg border focus:ring-2 focus:outline-none transition-all bg-gray-50 dark:bg-gray-700 appearance-none ${
+                            groupErrorId === device.id 
+                              ? 'border-red-300 text-red-900 dark:text-red-400 focus:ring-red-500 focus:border-red-500'
+                              : 'border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500'
+                          } ${updatingGroupId === device.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <option value="">Tanpa Group</option>
+                          {availableGroups.map(group => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                        {updatingGroupId === device.id && (
+                          <div className="absolute inset-y-0 right-6 pr-1 flex items-center pointer-events-none">
+                            <Loader2 className="h-3 w-3 text-indigo-500 animate-spin" />
+                          </div>
+                        )}
+                        {groupErrorId === device.id && (
+                          <div className="absolute inset-y-0 right-6 pr-1 flex items-center pointer-events-none">
+                            <AlertCircle className="h-3 w-3 text-red-500" />
+                          </div>
+                        )}
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                      </div>
+                      {groupErrorId === device.id && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                          Gagal mengubah group.
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900 dark:text-gray-200">
@@ -189,10 +302,24 @@ export function Overview() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Aktif
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setConfirmDeactivateId(device.id)}
+                          className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 bg-emerald-500"
+                          role="switch"
+                          aria-checked="true"
+                          title="Klik untuk menonaktifkan perangkat"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="translate-x-5 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                          />
+                        </button>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Aktif
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -201,6 +328,29 @@ export function Overview() {
           </table>
         </div>
       </div>
+
+      {/* Confirmation Modal for Deactivation */}
+      <ConfirmModal
+        isOpen={confirmDeactivateId !== null}
+        title="Nonaktifkan Perangkat"
+        message={`Apakah Anda yakin ingin menonaktifkan perangkat "${confirmDeactivateId}"? Perangkat ini akan dipindahkan kembali ke daftar Perangkat Tertunda.`}
+        confirmText="Nonaktifkan"
+        cancelText="Batal"
+        type="warning"
+        onConfirm={() => confirmDeactivateId && handleDeactivate(confirmDeactivateId)}
+        onCancel={() => setConfirmDeactivateId(null)}
+      />
+
+      {/* Alert Modal */}
+      {alertInfo && (
+        <AlertModal
+          isOpen={alertInfo.isOpen}
+          title={alertInfo.title}
+          message={alertInfo.message}
+          type={alertInfo.type}
+          onClose={() => setAlertInfo(null)}
+        />
+      )}
     </div>
   );
 }

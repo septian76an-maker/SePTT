@@ -10,6 +10,7 @@ import { Overview } from './pages/Overview';
 import { UsersPage } from './pages/UsersPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ServerPage } from './pages/ServerPage';
+import { GroupsPage } from './pages/GroupsPage';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -27,6 +28,7 @@ export default function App() {
     switch (activeTab) {
       case 'overview': return <Overview />;
       case 'pending': return <PendingDevices />;
+      case 'groups': return <GroupsPage />;
       case 'server': return <ServerPage />;
       case 'users': return <UsersPage />;
       case 'settings': return <SettingsPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;

@@ -7,7 +7,8 @@ import {
   Bell,
   Search,
   LogOut,
-  Cpu
+  Cpu,
+  Folder
 } from 'lucide-react';
 
 export function AdminLayout({ 
@@ -22,6 +23,7 @@ export function AdminLayout({
   const navItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'pending', label: 'Perangkat Tertunda', icon: Cpu },
+    { id: 'groups', label: 'Group', icon: Folder },
     { id: 'server', label: 'Server', icon: Server },
     { id: 'users', label: 'Pengguna', icon: Users },
     { id: 'settings', label: 'Pengaturan', icon: Settings },

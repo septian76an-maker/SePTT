@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Cpu, Link2, Server, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
+import { Cpu, Link2, Server, CheckCircle2, Loader2, AlertCircle, Trash2 } from 'lucide-react';
+import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, Timestamp, orderBy, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Device } from '../types';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { AlertModal } from '../components/AlertModal';
 
 export function PendingDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -11,6 +13,10 @@ export function PendingDevices() {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // States for custom modals
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [alertInfo, setAlertInfo] = useState<{isOpen: boolean, title: string, message: string, type: 'success' | 'error' | 'info'} | null>(null);
 
   useEffect(() => {
     // Query devices that are not active yet
@@ -90,6 +96,27 @@ export function PendingDevices() {
       setErrorId(deviceId);
     } finally {
       setLoadingId(null);
+    }
+  };
+
+  const handleDeleteDevice = async (deviceId: string) => {
+    setConfirmDeleteId(null);
+    try {
+      await deleteDoc(doc(db, 'devices', deviceId));
+      setAlertInfo({
+        isOpen: true,
+        title: 'Berhasil',
+        message: `Perangkat "${deviceId}" berhasil dihapus dari sistem.`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error("Gagal menghapus perangkat:", error);
+      setAlertInfo({
+        isOpen: true,
+        title: 'Gagal',
+        message: 'Gagal menghapus perangkat dari Firestore.',
+        type: 'error'
+      });
     }
   };
 
@@ -195,7 +222,14 @@ export function PendingDevices() {
                         </p>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setConfirmDeleteId(device.id)}
+                        className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-2 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                        title="Hapus Perangkat"
+                      >
+                        <Trash2 className="w-4.5 h-4.5" />
+                      </button>
                       <button
                         onClick={() => handleActivate(device.id)}
                         disabled={loadingId === device.id}
@@ -223,6 +257,29 @@ export function PendingDevices() {
           </table>
         </div>
       </div>
+
+      {/* Confirmation Modal for Deleting Pending Device */}
+      <ConfirmModal
+        isOpen={confirmDeleteId !== null}
+        title="Hapus Registrasi Perangkat"
+        message={`Apakah Anda yakin ingin menghapus perangkat "${confirmDeleteId}"? Tindakan ini bersifat permanen.`}
+        confirmText="Hapus"
+        cancelText="Batal"
+        type="danger"
+        onConfirm={() => confirmDeleteId && handleDeleteDevice(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+
+      {/* Alert Modal */}
+      {alertInfo && (
+        <AlertModal
+          isOpen={alertInfo.isOpen}
+          title={alertInfo.title}
+          message={alertInfo.message}
+          type={alertInfo.type}
+          onClose={() => setAlertInfo(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Server, Plus, Link as LinkIcon, Trash2, Loader2, ServerCog } from 'lucide-react';
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { AlertModal } from '../components/AlertModal';
 
 interface LivekitServer {
   id: string;
@@ -15,6 +17,10 @@ export function ServerPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serverName, setServerName] = useState('');
+
+  // States for custom modals
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [alertInfo, setAlertInfo] = useState<{isOpen: boolean, title: string, message: string, type: 'success' | 'error' | 'info'} | null>(null);
   
   // Format the name into a simple url, e.g. wss://[name]-livekit.app.com
   const generatedUrl = serverName.trim() 
@@ -57,21 +63,43 @@ export function ServerPage() {
         createdAt: serverTimestamp(),
       });
       setServerName('');
+      setAlertInfo({
+        isOpen: true,
+        title: 'Berhasil',
+        message: 'Server LiveKit berhasil ditambahkan.',
+        type: 'success'
+      });
     } catch (err) {
       console.error("Error adding server:", err);
-      alert("Gagal menambahkan server.");
+      setAlertInfo({
+        isOpen: true,
+        title: 'Gagal',
+        message: 'Gagal menambahkan server.',
+        type: 'error'
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteServer = async (id: string) => {
-    if (!confirm("Hapus konfigurasi server ini?")) return;
+    setConfirmDeleteId(null);
     try {
       await deleteDoc(doc(db, 'servers', id));
+      setAlertInfo({
+        isOpen: true,
+        title: 'Berhasil',
+        message: 'Konfigurasi server berhasil dihapus.',
+        type: 'success'
+      });
     } catch (err) {
       console.error("Error deleting server:", err);
-      alert("Gagal menghapus server.");
+      setAlertInfo({
+        isOpen: true,
+        title: 'Gagal',
+        message: 'Gagal menghapus server.',
+        type: 'error'
+      });
     }
   };
 
@@ -212,13 +240,28 @@ export function ServerPage() {
                                 });
                                 const data = await res.json();
                                 if (data.token) {
-                                  alert(`Token generated:\n\n${String(data.token).substring(0, 50)}...`);
+                                  setAlertInfo({
+                                    isOpen: true,
+                                    title: 'Token Dihasilkan',
+                                    message: `Token berhasil dibuat untuk server "${server.name}":\n\n${String(data.token).substring(0, 60)}...`,
+                                    type: 'success'
+                                  });
                                 } else {
-                                  alert(`Error: ${data.error}`);
+                                  setAlertInfo({
+                                    isOpen: true,
+                                    title: 'Gagal Membuat Token',
+                                    message: `Error: ${data.error}`,
+                                    type: 'error'
+                                  });
                                 }
                               } catch (e) {
                                 console.error(e);
-                                alert(`Failed to generate token: ${e instanceof Error ? e.message : String(e)}`);
+                                setAlertInfo({
+                                  isOpen: true,
+                                  title: 'Gagal Membuat Token',
+                                  message: `Failed to generate token: ${e instanceof Error ? e.message : String(e)}`,
+                                  type: 'error'
+                                });
                               }
                             }}
                             className="text-indigo-600 hover:text-indigo-900 dark:hover:text-indigo-400 p-1 mr-2 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
@@ -227,7 +270,7 @@ export function ServerPage() {
                             <ServerCog className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => handleDeleteServer(server.id)}
+                            onClick={() => setConfirmDeleteId(server.id)}
                             className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                             title="Hapus Server"
                           >
@@ -243,6 +286,29 @@ export function ServerPage() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmDeleteId !== null}
+        title="Hapus Konfigurasi Server"
+        message="Apakah Anda yakin ingin menghapus konfigurasi server LiveKit ini? Hubungan perangkat yang memakai server ini mungkin akan terganggu."
+        confirmText="Hapus"
+        cancelText="Batal"
+        type="danger"
+        onConfirm={() => confirmDeleteId && handleDeleteServer(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+
+      {/* Alert Modal */}
+      {alertInfo && (
+        <AlertModal
+          isOpen={alertInfo.isOpen}
+          title={alertInfo.title}
+          message={alertInfo.message}
+          type={alertInfo.type}
+          onClose={() => setAlertInfo(null)}
+        />
+      )}
     </div>
   );
 }
