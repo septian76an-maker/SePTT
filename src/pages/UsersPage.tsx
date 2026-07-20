@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Users, Trash2, KeyRound, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { UserPlus, Users, Trash2, KeyRound, Loader2, AlertCircle, CheckCircle2, Search } from 'lucide-react';
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -19,6 +19,7 @@ export function UsersPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // States for custom modals
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -187,6 +188,27 @@ export function UsersPage() {
         {/* Daftar Pengguna */}
         <div className="md:col-span-2">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden transition-colors h-full">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Daftar Pengguna</h2>
+                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                  {users.length} Admin
+                </span>
+              </div>
+              <div className="relative max-w-xs w-full">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full pl-9 pr-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                  placeholder="Cari pengguna..."
+                />
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -217,34 +239,46 @@ export function UsersPage() {
                         <p className="text-base font-medium text-gray-900 dark:text-white">Belum ada Admin</p>
                       </td>
                     </tr>
-                  ) : (
-                    users.map((user) => (
-                      <tr key={user.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="h-8 w-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-semibold text-sm">
-                              {user.username.charAt(0).toUpperCase()}
+                  ) : (() => {
+                      const filtered = users.filter(u => u.username.toLowerCase().includes(searchQuery.toLowerCase().trim()));
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                              <Search className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600 mb-3" />
+                              <p className="text-sm font-medium">Tidak ada hasil pencarian</p>
+                              <p className="text-xs mt-1">Coba cari dengan kata kunci lain.</p>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return filtered.map((user) => (
+                        <tr key={user.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-semibold text-sm">
+                                {user.username.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="ml-3 font-medium text-gray-900 dark:text-white">
+                                {user.username}
+                              </span>
                             </div>
-                            <span className="ml-3 font-medium text-gray-900 dark:text-white">
-                              {user.username}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {user.createdAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            onClick={() => setConfirmDeleteId(user.id)}
-                            className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors cursor-pointer"
-                            title="Hapus Pengguna"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {user.createdAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              onClick={() => setConfirmDeleteId(user.id)}
+                              className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors cursor-pointer"
+                              title="Hapus Pengguna"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
                 </tbody>
               </table>
             </div>

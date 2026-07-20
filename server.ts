@@ -35,20 +35,20 @@ async function startServer() {
         let roomName = `room-${deviceId}`;
         let channelName = "Utama";
 
-        if (data.isActive) {
-          if (data.groupId) {
-            const groupRef = doc(db, "groups", data.groupId);
-            const groupSnap = await getDoc(groupRef);
-            if (groupSnap.exists()) {
-              const groupData = groupSnap.data();
-              roomName = `group-${data.groupId}`;
-              channelName = groupData.name || "Tanpa Nama";
-            } else {
-              roomName = `group-${data.groupId}`;
-              channelName = "Grup Tidak Dikenal";
-            }
+        if (data.groupId) {
+          const groupRef = doc(db, "groups", data.groupId);
+          const groupSnap = await getDoc(groupRef);
+          if (groupSnap.exists()) {
+            const groupData = groupSnap.data();
+            roomName = `group-${data.groupId}`;
+            channelName = groupData.name || "Tanpa Nama";
+          } else {
+            roomName = `group-${data.groupId}`;
+            channelName = "Grup Tidak Dikenal";
           }
+        }
 
+        if (data.isActive) {
           const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
           const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
           const at = new AccessToken(apiKey, apiSecret, {
@@ -63,8 +63,9 @@ async function startServer() {
           deviceId,
           activationCode: data.activationCode,
           isActive: data.isActive,
-          assignedServerUrl: data.assignedServerUrl,
+          assignedServerUrl: data.assignedServerUrl || "",
           groupId: data.groupId || "",
+          name: data.name || "",
           groupName: channelName,
           channelName: channelName,
           roomName: roomName,
@@ -88,7 +89,13 @@ async function startServer() {
         message: "Device registered successfully",
         deviceId,
         activationCode,
-        isActive: false
+        isActive: false,
+        assignedServerUrl: "",
+        groupId: "",
+        name: "",
+        groupName: "Utama",
+        channelName: "Utama",
+        roomName: `room-${deviceId}`
       });
     } catch (error) {
       console.error("Error registering device:", error);
@@ -113,20 +120,20 @@ async function startServer() {
       let roomName = `room-${deviceId}`;
       let channelName = "Utama";
 
-      if (data.isActive) {
-        if (data.groupId) {
-          const groupRef = doc(db, "groups", data.groupId);
-          const groupSnap = await getDoc(groupRef);
-          if (groupSnap.exists()) {
-            const groupData = groupSnap.data();
-            roomName = `group-${data.groupId}`;
-            channelName = groupData.name || "Tanpa Nama";
-          } else {
-            roomName = `group-${data.groupId}`;
-            channelName = "Grup Tidak Dikenal";
-          }
+      if (data.groupId) {
+        const groupRef = doc(db, "groups", data.groupId);
+        const groupSnap = await getDoc(groupRef);
+        if (groupSnap.exists()) {
+          const groupData = groupSnap.data();
+          roomName = `group-${data.groupId}`;
+          channelName = groupData.name || "Tanpa Nama";
+        } else {
+          roomName = `group-${data.groupId}`;
+          channelName = "Grup Tidak Dikenal";
         }
+      }
 
+      if (data.isActive) {
         const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
         const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
         const at = new AccessToken(apiKey, apiSecret, {
@@ -142,6 +149,7 @@ async function startServer() {
         assignedServerUrl: data.assignedServerUrl || "",
         activationCode: data.activationCode,
         groupId: data.groupId || "",
+        name: data.name || "",
         groupName: channelName,
         channelName: channelName,
         roomName: roomName,

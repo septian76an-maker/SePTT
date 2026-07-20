@@ -38,20 +38,20 @@ router.post("/devices/register", async (req, res) => {
       let roomName = `room-${deviceId}`;
       let channelName = "Utama";
 
-      if (data.isActive) {
-        if (data.groupId) {
-          const groupRef = doc(db, "groups", data.groupId);
-          const groupSnap = await getDoc(groupRef);
-          if (groupSnap.exists()) {
-            const groupData = groupSnap.data();
-            roomName = `group-${data.groupId}`;
-            channelName = groupData.name || "Tanpa Nama";
-          } else {
-            roomName = `group-${data.groupId}`;
-            channelName = "Grup Tidak Dikenal";
-          }
+      if (data.groupId) {
+        const groupRef = doc(db, "groups", data.groupId);
+        const groupSnap = await getDoc(groupRef);
+        if (groupSnap.exists()) {
+          const groupData = groupSnap.data();
+          roomName = `group-${data.groupId}`;
+          channelName = groupData.name || "Tanpa Nama";
+        } else {
+          roomName = `group-${data.groupId}`;
+          channelName = "Grup Tidak Dikenal";
         }
+      }
 
+      if (data.isActive) {
         const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
         const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
         const at = new AccessToken(apiKey, apiSecret, {
@@ -66,8 +66,9 @@ router.post("/devices/register", async (req, res) => {
         deviceId,
         activationCode: data.activationCode,
         isActive: data.isActive,
-        assignedServerUrl: data.assignedServerUrl,
+        assignedServerUrl: data.assignedServerUrl || "",
         groupId: data.groupId || "",
+        name: data.name || "",
         groupName: channelName,
         channelName: channelName,
         roomName: roomName,
@@ -91,7 +92,13 @@ router.post("/devices/register", async (req, res) => {
       message: "Device registered successfully",
       deviceId,
       activationCode,
-      isActive: false
+      isActive: false,
+      assignedServerUrl: "",
+      groupId: "",
+      name: "",
+      groupName: "Utama",
+      channelName: "Utama",
+      roomName: `room-${deviceId}`
     });
   } catch (error) {
     console.error("Error registering device:", error);
@@ -116,20 +123,20 @@ router.get("/devices/:deviceId/status", async (req, res) => {
     let roomName = `room-${deviceId}`;
     let channelName = "Utama";
 
-    if (data.isActive) {
-      if (data.groupId) {
-        const groupRef = doc(db, "groups", data.groupId);
-        const groupSnap = await getDoc(groupRef);
-        if (groupSnap.exists()) {
-          const groupData = groupSnap.data();
-          roomName = `group-${data.groupId}`;
-          channelName = groupData.name || "Tanpa Nama";
-        } else {
-          roomName = `group-${data.groupId}`;
-          channelName = "Grup Tidak Dikenal";
-        }
+    if (data.groupId) {
+      const groupRef = doc(db, "groups", data.groupId);
+      const groupSnap = await getDoc(groupRef);
+      if (groupSnap.exists()) {
+        const groupData = groupSnap.data();
+        roomName = `group-${data.groupId}`;
+        channelName = groupData.name || "Tanpa Nama";
+      } else {
+        roomName = `group-${data.groupId}`;
+        channelName = "Grup Tidak Dikenal";
       }
+    }
 
+    if (data.isActive) {
       const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
       const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
       const at = new AccessToken(apiKey, apiSecret, {
@@ -145,6 +152,7 @@ router.get("/devices/:deviceId/status", async (req, res) => {
       assignedServerUrl: data.assignedServerUrl || "",
       activationCode: data.activationCode,
       groupId: data.groupId || "",
+      name: data.name || "",
       groupName: channelName,
       channelName: channelName,
       roomName: roomName,

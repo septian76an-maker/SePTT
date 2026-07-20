@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FolderPlus, Folder, Trash2, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { FolderPlus, Folder, Trash2, Loader2, AlertCircle, CheckCircle2, Search } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -18,6 +18,7 @@ export function GroupsPage() {
   const [groupName, setGroupName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // States for custom modals
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -166,11 +167,25 @@ export function GroupsPage() {
         {/* Daftar Group */}
         <div className="md:col-span-2">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden transition-colors">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Daftar Group</h2>
-              <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
-                {groups.length} Group
-              </span>
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Daftar Group</h2>
+                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                  {groups.length} Group
+                </span>
+              </div>
+              <div className="relative max-w-xs w-full">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full pl-9 pr-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                  placeholder="Cari group..."
+                />
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -204,8 +219,20 @@ export function GroupsPage() {
                         <p className="text-xs mt-1">Gunakan form di samping untuk membuat group pertama Anda.</p>
                       </td>
                     </tr>
-                  ) : (
-                    groups.map((group) => (
+                  ) : (() => {
+                      const filtered = groups.filter(g => g.name.toLowerCase().includes(searchQuery.toLowerCase().trim()));
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                              <Search className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600 mb-2" />
+                              <p className="text-sm font-medium">Tidak ada hasil pencarian</p>
+                              <p className="text-xs mt-1">Coba cari dengan kata kunci lain.</p>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return filtered.map((group) => (
                       <tr key={group.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2.5">
@@ -235,7 +262,7 @@ export function GroupsPage() {
                         </td>
                       </tr>
                     ))
-                  )}
+                  })()}
                 </tbody>
               </table>
             </div>

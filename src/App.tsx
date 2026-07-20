@@ -11,10 +11,17 @@ import { UsersPage } from './pages/UsersPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ServerPage } from './pages/ServerPage';
 import { GroupsPage } from './pages/GroupsPage';
+import { LoginPage } from './pages/LoginPage';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('isAuthenticated') === 'true';
+  });
+  const [username, setUsername] = useState(() => {
+    return localStorage.getItem('username') || '';
+  });
 
   useEffect(() => {
     if (isDarkMode) {
@@ -23,6 +30,24 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  const handleLogin = (loggedInUsername: string) => {
+    setIsAuthenticated(true);
+    setUsername(loggedInUsername);
+    localStorage.setItem('isAuthenticated', 'true');
+    localStorage.setItem('username', loggedInUsername);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUsername('');
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('username');
+  };
+
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -37,7 +62,12 @@ export default function App() {
   };
 
   return (
-    <AdminLayout activeTab={activeTab} onTabChange={setActiveTab}>
+    <AdminLayout 
+      activeTab={activeTab} 
+      onTabChange={setActiveTab}
+      onLogout={handleLogout}
+      username={username}
+    >
       {renderContent()}
     </AdminLayout>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Server, Plus, Link as LinkIcon, Trash2, Loader2, ServerCog } from 'lucide-react';
+import { Server, Plus, Link as LinkIcon, Trash2, Loader2, ServerCog, Search } from 'lucide-react';
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -17,6 +17,7 @@ export function ServerPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serverName, setServerName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // States for custom modals
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -185,6 +186,27 @@ export function ServerPage() {
         {/* Daftar Server */}
         <div className="md:col-span-2">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden transition-colors h-full">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Daftar Server</h2>
+                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                  {servers.length} Server
+                </span>
+              </div>
+              <div className="relative max-w-xs w-full">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full pl-9 pr-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
+                  placeholder="Cari server..."
+                />
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -215,71 +237,86 @@ export function ServerPage() {
                         <p className="text-base font-medium text-gray-900 dark:text-white">Belum ada Server</p>
                       </td>
                     </tr>
-                  ) : (
-                    servers.map((server) => (
-                      <tr key={server.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            {server.name}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md inline-block">
-                            <LinkIcon className="w-3.5 h-3.5" />
-                            {server.url}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            onClick={async () => {
-                              try {
-                                const res = await fetch('/api/livekit/token', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ roomName: server.name, participantName: 'admin-user' })
-                                });
-                                const data = await res.json();
-                                if (data.token) {
-                                  setAlertInfo({
-                                    isOpen: true,
-                                    title: 'Token Dihasilkan',
-                                    message: `Token berhasil dibuat untuk server "${server.name}":\n\n${String(data.token).substring(0, 60)}...`,
-                                    type: 'success'
+                  ) : (() => {
+                      const filtered = servers.filter(s => 
+                        s.name.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
+                        s.url.toLowerCase().includes(searchQuery.toLowerCase().trim())
+                      );
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                              <Search className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600 mb-3" />
+                              <p className="text-sm font-medium">Tidak ada hasil pencarian</p>
+                              <p className="text-xs mt-1">Coba cari dengan kata kunci lain.</p>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return filtered.map((server) => (
+                        <tr key={server.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="font-medium text-gray-900 dark:text-white">
+                              {server.name}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-md inline-block">
+                              <LinkIcon className="w-3.5 h-3.5" />
+                              {server.url}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch('/api/livekit/token', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ roomName: server.name, participantName: 'admin-user' })
                                   });
-                                } else {
+                                  const data = await res.json();
+                                  if (data.token) {
+                                    setAlertInfo({
+                                      isOpen: true,
+                                      title: 'Token Dihasilkan',
+                                      message: `Token berhasil dibuat untuk server "${server.name}":\n\n${String(data.token).substring(0, 60)}...`,
+                                      type: 'success'
+                                    });
+                                  } else {
+                                    setAlertInfo({
+                                      isOpen: true,
+                                      title: 'Gagal Membuat Token',
+                                      message: `Error: ${data.error}`,
+                                      type: 'error'
+                                    });
+                                  }
+                                } catch (e) {
+                                  console.error(e);
                                   setAlertInfo({
                                     isOpen: true,
                                     title: 'Gagal Membuat Token',
-                                    message: `Error: ${data.error}`,
+                                    message: `Failed to generate token: ${e instanceof Error ? e.message : String(e)}`,
                                     type: 'error'
                                   });
                                 }
-                              } catch (e) {
-                                console.error(e);
-                                setAlertInfo({
-                                  isOpen: true,
-                                  title: 'Gagal Membuat Token',
-                                  message: `Failed to generate token: ${e instanceof Error ? e.message : String(e)}`,
-                                  type: 'error'
-                                });
-                              }
-                            }}
-                            className="text-indigo-600 hover:text-indigo-900 dark:hover:text-indigo-400 p-1 mr-2 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
-                            title="Generate Token"
-                          >
-                            <ServerCog className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteId(server.id)}
-                            className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                            title="Hapus Server"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                              }}
+                              className="text-indigo-600 hover:text-indigo-900 dark:hover:text-indigo-400 p-1 mr-2 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                              title="Generate Token"
+                            >
+                              <ServerCog className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(server.id)}
+                              className="text-red-500 hover:text-red-700 dark:hover:text-red-400 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                              title="Hapus Server"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
                 </tbody>
               </table>
             </div>
