@@ -12,6 +12,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { ServerPage } from './pages/ServerPage';
 import { GroupsPage } from './pages/GroupsPage';
 import { LoginPage } from './pages/LoginPage';
+import { LiveKitMonitoringPage } from './pages/LiveKitMonitoringPage';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -56,6 +57,7 @@ export default function App() {
       case 'groups': return <GroupsPage />;
       case 'server': return <ServerPage />;
       case 'users': return <UsersPage />;
+      case 'livekit': return <LiveKitMonitoringPage />;
       case 'settings': return <SettingsPage isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;
       default: return <Overview />;
     }

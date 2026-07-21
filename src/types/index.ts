@@ -7,4 +7,6 @@ export interface Device {
   name?: string;
   createdAt: Date;
   activatedAt?: Date;
+  lastSeenAt?: Date;
+  isOnline?: boolean;
 }

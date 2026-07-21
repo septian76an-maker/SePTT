@@ -5,6 +5,7 @@ import { db } from '../firebase';
 import { Device } from '../types';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { AlertModal } from '../components/AlertModal';
+import { notifyUpdate } from '../utils/fcm';
 
 export function Overview() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -46,6 +47,8 @@ export function Overview() {
           name: data.name || '',
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
           activatedAt: data.activatedAt instanceof Timestamp ? data.activatedAt.toDate() : undefined,
+          lastSeenAt: data.lastSeenAt instanceof Timestamp ? data.lastSeenAt.toDate() : undefined,
+          isOnline: data.isOnline,
         });
       });
       setDevices(devicesData);
@@ -106,6 +109,7 @@ export function Overview() {
       await updateDoc(deviceRef, {
         assignedServerUrl: newUrl
       });
+      notifyUpdate(`device-${deviceId}`, "Server URL Diperbarui", "URL Server untuk perangkat ini telah diubah.");
     } catch (error) {
       console.error("Gagal mengubah server:", error);
       setErrorId(deviceId);
@@ -123,6 +127,7 @@ export function Overview() {
       await updateDoc(deviceRef, {
         groupId: newGroupId
       });
+      notifyUpdate(`device-${deviceId}`, "Grup Diperbarui", "Grup untuk perangkat ini telah diubah.");
     } catch (error) {
       console.error("Gagal mengubah group:", error);
       setGroupErrorId(deviceId);
@@ -138,6 +143,7 @@ export function Overview() {
       await updateDoc(deviceRef, {
         isActive: false
       });
+      notifyUpdate(`device-${deviceId}`, "Perangkat Dinonaktifkan", "Perangkat ini telah dinonaktifkan oleh Admin.");
       setAlertInfo({
         isOpen: true,
         title: 'Berhasil',
@@ -162,6 +168,7 @@ export function Overview() {
       await updateDoc(deviceRef, {
         name: tempName.trim()
       });
+      notifyUpdate(`device-${deviceId}`, "Nama Diperbarui", `Nama perangkat diubah menjadi: ${tempName.trim()}`);
       setEditingNameId(null);
     } catch (error) {
       console.error("Gagal menyimpan nama perangkat:", error);
@@ -221,6 +228,9 @@ export function Overview() {
                 </th>
                 <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
                   Nama
+                </th>
+                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                  Status Online
                 </th>
                 <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
                   Group
@@ -321,6 +331,25 @@ export function Overview() {
                           </div>
                         )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        let isOnline = false;
+                        if (device.isOnline) {
+                          isOnline = true;
+                        } else if (device.lastSeenAt) {
+                          const diffMinutes = (new Date().getTime() - device.lastSeenAt.getTime()) / 60000;
+                          if (diffMinutes < 5) isOnline = true;
+                        }
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-gray-400'}`}></span>
+                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                              {isOnline ? 'Online' : 'Offline'}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="relative max-w-[180px]">

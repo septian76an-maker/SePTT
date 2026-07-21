@@ -11,7 +11,8 @@ import {
   Folder,
   Clock,
   Menu,
-  X
+  X,
+  Activity
 } from 'lucide-react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -30,6 +31,22 @@ export function AdminLayout({
   username: string;
 }) {
   const [pendingDevices, setPendingDevices] = useState<any[]>([]);
+  const [dismissedDeviceIds, setDismissedDeviceIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('dismissedDevices');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const handleMarkAllRead = () => {
+    const newDismissed = [...dismissedDeviceIds, ...pendingDevices.map(d => d.id)];
+    const uniqueDismissed = Array.from(new Set(newDismissed));
+    setDismissedDeviceIds(uniqueDismissed);
+    localStorage.setItem('dismissedDevices', JSON.stringify(uniqueDismissed));
+    setShowNotifications(false);
+  };
+  const visibleNotifications = pendingDevices.filter(d => !dismissedDeviceIds.includes(d.id));
   const [showNotifications, setShowNotifications] = useState(false);
   const [isWiggling, setIsWiggling] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -78,6 +95,7 @@ export function AdminLayout({
     { id: 'groups', label: 'Group', icon: Folder },
     { id: 'server', label: 'Server', icon: Server },
     { id: 'users', label: 'Pengguna', icon: Users },
+    { id: 'livekit', label: 'LiveKit Monitoring', icon: Activity },
     { id: 'settings', label: 'Pengaturan', icon: Settings },
   ];
 
@@ -173,29 +191,39 @@ export function AdminLayout({
               >
                 <span className="sr-only">Notifikasi</span>
                 <Bell className={`h-5 w-5 ${isWiggling ? 'animate-wiggle' : ''}`} />
-                {pendingDevices.length > 0 && (
+                {visibleNotifications.length > 0 && (
                   <span className="absolute top-1 right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-800" />
                 )}
               </button>
 
               {showNotifications && (
                 <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden z-50">
-                  <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center">
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                    <div className="flex justify-between items-center mb-2">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Notifikasi</h3>
-                    {pendingDevices.length > 0 && (
+                    {visibleNotifications.length > 0 && (
                       <span className="text-xs font-medium bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
-                        {pendingDevices.length} Baru
+                        {visibleNotifications.length} Baru
                       </span>
+                    )}
+                    </div>
+                    {visibleNotifications.length > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="w-full text-right text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium"
+                      >
+                        Tandai sudah dibaca
+                      </button>
                     )}
                   </div>
                   <div className="max-h-96 overflow-y-auto">
-                    {pendingDevices.length === 0 ? (
+                    {visibleNotifications.length === 0 ? (
                       <div className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                         Tidak ada notifikasi baru
                       </div>
                     ) : (
                       <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {pendingDevices.slice(0, 4).map(device => (
+                        {visibleNotifications.slice(0, 4).map(device => (
                           <div 
                             key={device.id}
                             className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
@@ -215,7 +243,7 @@ export function AdminLayout({
                       </div>
                     )}
                   </div>
-                  {pendingDevices.length > 0 && (
+                  {visibleNotifications.length > 0 && (
                     <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
                       <button 
                         onClick={() => {

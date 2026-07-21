@@ -5,6 +5,7 @@ import { db } from '../firebase';
 import { Device } from '../types';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { AlertModal } from '../components/AlertModal';
+import { notifyUpdate } from '../utils/fcm';
 
 export function PendingDevices() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -98,6 +99,7 @@ export function PendingDevices() {
         assignedServerUrl: url,
         activatedAt: serverTimestamp()
       });
+      notifyUpdate(`device-${deviceId}`, "Perangkat Diaktifkan", "Perangkat Anda telah disetujui dan diaktifkan.");
     } catch (error) {
       console.error("Gagal mengaktivasi:", error);
       setErrorId(deviceId);
@@ -134,6 +136,7 @@ export function PendingDevices() {
       await updateDoc(deviceRef, {
         name: tempName.trim()
       });
+      notifyUpdate(`device-${deviceId}`, "Nama Diperbarui", `Nama perangkat diubah menjadi: ${tempName.trim()}`);
       setEditingNameId(null);
     } catch (error) {
       console.error("Gagal menyimpan nama perangkat:", error);

@@ -1,9 +1,35 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { AccessToken } from "livekit-server-sdk";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "./src/firebase";
+import { initializeApp, cert } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
+
+let adminApp: any = null;
+function getFirebaseAdmin() {
+  if (!adminApp) {
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (serviceAccountJson) {
+      try {
+        const serviceAccount = JSON.parse(serviceAccountJson);
+        adminApp = initializeApp({
+          credential: cert(serviceAccount)
+        });
+      } catch (e) {
+        console.error("Error parsing FIREBASE_SERVICE_ACCOUNT", e);
+      }
+    } else {
+      try {
+        adminApp = initializeApp();
+      } catch (e) {
+        console.error("Error initializing default Firebase Admin", e);
+      }
+    }
+  }
+  return adminApp;
+}
 
 async function startServer() {
   const app = express();
@@ -114,7 +140,12 @@ async function startServer() {
       if (!docSnap.exists()) {
         return res.status(404).json({ error: "Device not found" });
       }
-      
+
+      // Update last seen status
+      await updateDoc(docRef, { lastSeenAt: serverTimestamp() }).catch(e => {
+        console.error("Failed to update lastSeenAt", e);
+      });
+
       const data = docSnap.data();
       let token = undefined;
       let roomName = `room-${deviceId}`;
@@ -188,6 +219,67 @@ async function startServer() {
     } catch (error) {
       console.error("Error generating LiveKit token:", error);
       res.status(500).json({ error: "Failed to generate token" });
+    }
+  });
+
+  // API Route to fetch LiveKit monitoring data
+  app.get("/api/livekit/monitoring", async (req, res) => {
+    const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
+    const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
+    const wsUrl = process.env.LIVEKIT_URL || "ws://localhost:7880";
+
+    if (!apiKey || !apiSecret) {
+      return res.status(500).json({ error: "LIVEKIT_API_KEY or LIVEKIT_API_SECRET is missing" });
+    }
+
+    try {
+      const roomService = new RoomServiceClient(wsUrl, apiKey, apiSecret);
+      const rooms = await roomService.listRooms();
+      
+      const sessions = rooms.map(room => ({
+        id: room.sid,
+        name: room.name,
+        participants: room.numParticipants,
+        createdAt: new Date(Number(room.creationTime) * 1000).toISOString(),
+      }));
+
+      // In a real scenario, WebRTC minutes, upstream, and downstream would come from LiveKit analytics.
+      // Since we don't have access to the analytics DB here, we will generate placeholder aggregated data based on rooms,
+      // or just return mocked data for the cards as requested by the user, while the sessions table is real.
+      res.json({ 
+        sessions,
+        stats: {
+          participantMinutes: 12450, // Placeholder
+          totalUpstream: "450.2 GB", // Placeholder
+          totalDownstream: "1.2 TB" // Placeholder
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching LiveKit monitoring data:", error);
+      res.status(500).json({ error: "Failed to fetch monitoring data" });
+    }
+  });
+
+  // API Route to send FCM notifications
+  app.post("/api/fcm/notify", async (req, res) => {
+    const { title, body, topic, data } = req.body;
+    try {
+      const adminInstance = getFirebaseAdmin();
+      if (!adminInstance) {
+        return res.status(500).json({ error: "Firebase Admin not configured" });
+      }
+      
+      const message = {
+        notification: { title, body },
+        data: data || {},
+        topic: topic || "global"
+      };
+      
+      const response = await getMessaging(adminInstance).send(message as any);
+      res.json({ success: true, messageId: response });
+    } catch (error: any) {
+      console.error("FCM Error:", error);
+      res.status(500).json({ error: "Failed to send notification", details: error?.message || String(error) });
     }
   });
 

@@ -4,6 +4,7 @@ import { collection, addDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query,
 import { db } from '../firebase';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { AlertModal } from '../components/AlertModal';
+import { notifyUpdate } from '../utils/fcm';
 
 interface Group {
   id: string;
@@ -63,6 +64,7 @@ export function GroupsPage() {
         name: groupName.trim(),
         createdAt: serverTimestamp(),
       });
+      notifyUpdate('global', 'Grup Baru Dibuat', `Grup "${groupName.trim()}" telah ditambahkan.`);
       setSuccessMsg("Group berhasil ditambahkan.");
       setGroupName('');
       setTimeout(() => setSuccessMsg(null), 3000);
@@ -78,6 +80,7 @@ export function GroupsPage() {
     setConfirmDeleteId(null);
     try {
       await deleteDoc(doc(db, 'groups', id));
+      notifyUpdate('global', 'Grup Dihapus', 'Sebuah grup telah dihapus dari sistem.');
       setAlertInfo({
         isOpen: true,
         title: 'Berhasil',
