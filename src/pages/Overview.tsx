@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cpu, Server, Loader2, CheckCircle2, Link2, AlertCircle, Folder, Search } from 'lucide-react';
+import { Cpu, Server, Loader2, CheckCircle2, Link2, AlertCircle, Folder, Search, Layers, X, Check } from 'lucide-react';
 import { collection, query, where, onSnapshot, Timestamp, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Device } from '../types';
@@ -23,6 +23,10 @@ export function Overview() {
   const [tempName, setTempName] = useState('');
   const [isSavingName, setIsSavingName] = useState(false);
 
+  // Multi-group modal states
+  const [managingGroupsDevice, setManagingGroupsDevice] = useState<Device | null>(null);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+
   // States for custom modals
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
   const [alertInfo, setAlertInfo] = useState<{isOpen: boolean, title: string, message: string, type: 'success' | 'error' | 'info'} | null>(null);
@@ -38,12 +42,17 @@ export function Overview() {
       const devicesData: Device[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        const groupIdsArr = Array.isArray(data.groupIds) && data.groupIds.length > 0
+          ? data.groupIds.filter((g: any) => typeof g === 'string' && g.trim() !== '')
+          : (data.groupId ? [data.groupId] : []);
+
         devicesData.push({
           id: docSnap.id,
           activationCode: data.activationCode || '',
           isActive: data.isActive || false,
           assignedServerUrl: data.assignedServerUrl || '',
-          groupId: data.groupId || '',
+          groupId: data.groupId || (groupIdsArr[0] || ''),
+          groupIds: groupIdsArr,
           name: data.name || '',
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(),
           activatedAt: data.activatedAt instanceof Timestamp ? data.activatedAt.toDate() : undefined,
@@ -118,16 +127,34 @@ export function Overview() {
     }
   };
 
-  const handleGroupChange = async (deviceId: string, newGroupId: string) => {
+  const handleOpenMultiGroupModal = (device: Device) => {
+    setManagingGroupsDevice(device);
+    setSelectedGroupIds(device.groupIds || (device.groupId ? [device.groupId] : []));
+  };
+
+  const handleToggleGroupSelection = (groupId: string) => {
+    setSelectedGroupIds(prev => 
+      prev.includes(groupId)
+        ? prev.filter(id => id !== groupId)
+        : [...prev, groupId]
+    );
+  };
+
+  const handleSaveMultiGroups = async () => {
+    if (!managingGroupsDevice) return;
+    const deviceId = managingGroupsDevice.id;
+
     setUpdatingGroupId(deviceId);
     setGroupErrorId(null);
     
     try {
       const deviceRef = doc(db, 'devices', deviceId);
       await updateDoc(deviceRef, {
-        groupId: newGroupId
+        groupIds: selectedGroupIds,
+        groupId: selectedGroupIds[0] || ''
       });
-      notifyUpdate(`device-${deviceId}`, "Grup Diperbarui", "Grup untuk perangkat ini telah diubah.");
+      notifyUpdate(`device-${deviceId}`, "Daftar Grup Diperbarui", `Perangkat sekarang memiliki ${selectedGroupIds.length} grup terdaftar.`);
+      setManagingGroupsDevice(null);
     } catch (error) {
       console.error("Gagal mengubah group:", error);
       setGroupErrorId(deviceId);
@@ -181,7 +208,7 @@ export function Overview() {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     
-    const groupName = availableGroups.find(g => g.id === device.groupId)?.name || 'Tanpa Group';
+    const assignedGroupNames = (device.groupIds || []).map(gid => availableGroups.find(g => g.id === gid)?.name || '').join(' ');
     const serverName = availableServers.find(s => s.url === device.assignedServerUrl)?.name || '';
     const deviceName = device.name || '';
 
@@ -189,7 +216,7 @@ export function Overview() {
       device.id.toLowerCase().includes(q) ||
       device.activationCode.toLowerCase().includes(q) ||
       deviceName.toLowerCase().includes(q) ||
-      groupName.toLowerCase().includes(q) ||
+      assignedGroupNames.toLowerCase().includes(q) ||
       serverName.toLowerCase().includes(q) ||
       device.assignedServerUrl.toLowerCase().includes(q)
     );
@@ -352,46 +379,37 @@ export function Overview() {
                       })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="relative max-w-[180px]">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Folder className="h-4 w-4 text-gray-400" />
+                      <div className="flex flex-col gap-1.5 max-w-[220px]">
+                        <div className="flex flex-wrap gap-1">
+                          {(() => {
+                            const deviceGroupIds = device.groupIds || (device.groupId ? [device.groupId] : []);
+                            if (deviceGroupIds.length === 0) {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                                  <Folder className="w-3 h-3" />
+                                  Tanpa Group
+                                </span>
+                              );
+                            }
+                            return deviceGroupIds.map(gid => {
+                              const groupObj = availableGroups.find(g => g.id === gid);
+                              return (
+                                <span key={gid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/50">
+                                  <Folder className="w-3 h-3 text-indigo-500 shrink-0" />
+                                  {groupObj ? groupObj.name : 'Grup Dihapus'}
+                                </span>
+                              );
+                            });
+                          })()}
                         </div>
-                        <select
-                          value={device.groupId || ''}
-                          onChange={(e) => handleGroupChange(device.id, e.target.value)}
-                          disabled={updatingGroupId === device.id}
-                          className={`block w-full pl-9 pr-8 py-1.5 sm:text-xs rounded-lg border focus:ring-2 focus:outline-none transition-all bg-gray-50 dark:bg-gray-700 appearance-none ${
-                            groupErrorId === device.id 
-                              ? 'border-red-300 text-red-900 dark:text-red-400 focus:ring-red-500 focus:border-red-500'
-                              : 'border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500'
-                          } ${updatingGroupId === device.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        <button
+                          onClick={() => handleOpenMultiGroupModal(device)}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors w-fit cursor-pointer"
                         >
-                          <option value="">Tanpa Group</option>
-                          {availableGroups.map(group => (
-                            <option key={group.id} value={group.id}>
-                              {group.name}
-                            </option>
-                          ))}
-                        </select>
-                        {updatingGroupId === device.id && (
-                          <div className="absolute inset-y-0 right-6 pr-1 flex items-center pointer-events-none">
-                            <Loader2 className="h-3 w-3 text-indigo-500 animate-spin" />
-                          </div>
-                        )}
-                        {groupErrorId === device.id && (
-                          <div className="absolute inset-y-0 right-6 pr-1 flex items-center pointer-events-none">
-                            <AlertCircle className="h-3 w-3 text-red-500" />
-                          </div>
-                        )}
-                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </div>
+                          <Layers className="w-3.5 h-3.5" />
+                          Atur Group ({(device.groupIds || (device.groupId ? [device.groupId] : [])).length})
+                        </button>
                       </div>
-                      {groupErrorId === device.id && (
-                        <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                          Gagal mengubah group.
-                        </p>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900 dark:text-gray-200">
@@ -482,6 +500,123 @@ export function Overview() {
         onConfirm={() => confirmDeactivateId && handleDeactivate(confirmDeactivateId)}
         onCancel={() => setConfirmDeactivateId(null)}
       />
+
+      {/* Multi-Group Selection Modal */}
+      {managingGroupsDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full border border-gray-100 dark:border-gray-700 overflow-hidden transition-all">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/50 rounded-xl text-indigo-600 dark:text-indigo-400">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                    Pilih Group Perangkat
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {managingGroupsDevice.name || managingGroupsDevice.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setManagingGroupsDevice(null)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-xs text-gray-600 dark:text-gray-300">
+                Centang group yang dapat diakses oleh perangkat ini. Pengguna di aplikasi Android client dapat berpindah antar group yang telah Anda pilih.
+              </p>
+
+              <div className="flex items-center justify-between text-xs pb-1 border-b border-gray-100 dark:border-gray-700">
+                <span className="font-medium text-gray-500 dark:text-gray-400">
+                  {selectedGroupIds.length} group dipilih
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGroupIds(availableGroups.map(g => g.id))}
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-medium"
+                  >
+                    Pilih Semua
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGroupIds([])}
+                    className="text-gray-500 dark:text-gray-400 hover:underline cursor-pointer"
+                  >
+                    Kosongkan
+                  </button>
+                </div>
+              </div>
+
+              {availableGroups.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 dark:text-gray-500 text-xs">
+                  Belum ada group yang dibuat. Silakan buat group di menu Manajemen Group terlebih dahulu.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {availableGroups.map((group) => {
+                    const isSelected = selectedGroupIds.includes(group.id);
+                    return (
+                      <div
+                        key={group.id}
+                        onClick={() => handleToggleGroupSelection(group.id)}
+                        className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-indigo-50/70 border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200'
+                            : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Folder className={`w-4 h-4 ${isSelected ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`} />
+                          <span className="text-sm font-medium">{group.name}</span>
+                        </div>
+                        <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600 border-indigo-600 text-white dark:bg-indigo-500 dark:border-indigo-500'
+                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
+                        }`}>
+                          {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-100 dark:border-gray-700 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setManagingGroupsDevice(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveMultiGroups}
+                disabled={updatingGroupId === managingGroupsDevice.id}
+                className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 rounded-xl shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {updatingGroupId === managingGroupsDevice.id ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  'Simpan Perubahan'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Alert Modal */}
       {alertInfo && (

@@ -43,6 +43,86 @@ async function startServer() {
     next();
   });
 
+  // Helper to resolve device groups and LiveKit token details
+  async function resolveDeviceGroups(data: any, deviceId: string, requestedGroupId?: string) {
+    let groupIds: string[] = [];
+    if (Array.isArray(data.groupIds) && data.groupIds.length > 0) {
+      groupIds = data.groupIds.filter((id: any) => typeof id === 'string' && id.trim() !== '');
+    } else if (data.groupId) {
+      groupIds = [data.groupId];
+    }
+
+    const groupsList: { id: string; name: string; roomName: string; token?: string }[] = [];
+    const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
+    const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
+
+    for (const gid of groupIds) {
+      if (!gid) continue;
+      const groupRef = doc(db, "groups", gid);
+      const groupSnap = await getDoc(groupRef);
+      const groupName = groupSnap.exists() ? (groupSnap.data().name || "Tanpa Nama") : "Grup Tidak Dikenal";
+      const roomName = `group-${gid}`;
+
+      let groupToken: string | undefined = undefined;
+      if (data.isActive) {
+        try {
+          const at = new AccessToken(apiKey, apiSecret, { identity: `device-${deviceId}` });
+          at.addGrant({ roomJoin: true, room: roomName });
+          groupToken = await at.toJwt();
+        } catch (e) {
+          console.error(`Error generating token for group ${gid}:`, e);
+        }
+      }
+
+      groupsList.push({
+        id: gid,
+        name: groupName,
+        roomName,
+        ...(groupToken && { token: groupToken })
+      });
+    }
+
+    // Selected active group ID
+    let primaryGroupId = requestedGroupId;
+    if (!primaryGroupId || (!groupIds.includes(primaryGroupId) && groupIds.length > 0)) {
+      primaryGroupId = data.groupId && groupIds.includes(data.groupId) ? data.groupId : (groupIds[0] || "");
+    }
+
+    let roomName = primaryGroupId ? `group-${primaryGroupId}` : `room-${deviceId}`;
+    let channelName = "Utama";
+
+    const selectedGroupObj = groupsList.find(g => g.id === primaryGroupId);
+    if (selectedGroupObj) {
+      channelName = selectedGroupObj.name;
+    } else if (data.groupId) {
+      const groupRef = doc(db, "groups", data.groupId);
+      const groupSnap = await getDoc(groupRef);
+      if (groupSnap.exists()) {
+        channelName = groupSnap.data().name || "Tanpa Nama";
+      }
+    }
+
+    let mainToken: string | undefined = undefined;
+    if (data.isActive) {
+      try {
+        const at = new AccessToken(apiKey, apiSecret, { identity: `device-${deviceId}` });
+        at.addGrant({ roomJoin: true, room: roomName });
+        mainToken = await at.toJwt();
+      } catch (e) {
+        console.error("Error generating main token:", e);
+      }
+    }
+
+    return {
+      groupIds,
+      groups: groupsList,
+      primaryGroupId,
+      channelName,
+      roomName,
+      mainToken
+    };
+  }
+
   // API Route to register a new device from Android App
   app.post("/api/devices/register", async (req, res) => {
     const { deviceId } = req.body;
@@ -57,32 +137,7 @@ async function startServer() {
 
       if (docSnap.exists()) {
         const data = docSnap.data();
-        let token = undefined;
-        let roomName = `room-${deviceId}`;
-        let channelName = "Utama";
-
-        if (data.groupId) {
-          const groupRef = doc(db, "groups", data.groupId);
-          const groupSnap = await getDoc(groupRef);
-          if (groupSnap.exists()) {
-            const groupData = groupSnap.data();
-            roomName = `group-${data.groupId}`;
-            channelName = groupData.name || "Tanpa Nama";
-          } else {
-            roomName = `group-${data.groupId}`;
-            channelName = "Grup Tidak Dikenal";
-          }
-        }
-
-        if (data.isActive) {
-          const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
-          const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
-          const at = new AccessToken(apiKey, apiSecret, {
-            identity: `device-${deviceId}`,
-          });
-          at.addGrant({ roomJoin: true, room: roomName });
-          token = await at.toJwt();
-        }
+        const resolved = await resolveDeviceGroups(data, deviceId, req.body.groupId || (req.query.groupId as string));
 
         return res.json({ 
           message: "Device already registered", 
@@ -90,12 +145,14 @@ async function startServer() {
           activationCode: data.activationCode,
           isActive: data.isActive,
           assignedServerUrl: data.assignedServerUrl || "",
-          groupId: data.groupId || "",
+          groupId: resolved.primaryGroupId,
+          groupIds: resolved.groupIds,
+          groups: resolved.groups,
           name: data.name || "",
-          groupName: channelName,
-          channelName: channelName,
-          roomName: roomName,
-          ...(token && { token })
+          groupName: resolved.channelName,
+          channelName: resolved.channelName,
+          roomName: resolved.roomName,
+          ...(resolved.mainToken && { token: resolved.mainToken })
         });
       }
 
@@ -106,6 +163,7 @@ async function startServer() {
         activationCode,
         isActive: false,
         assignedServerUrl: "",
+        groupIds: [],
         createdAt: serverTimestamp(),
       };
 
@@ -118,6 +176,8 @@ async function startServer() {
         isActive: false,
         assignedServerUrl: "",
         groupId: "",
+        groupIds: [],
+        groups: [],
         name: "",
         groupName: "Utama",
         channelName: "Utama",
@@ -132,6 +192,7 @@ async function startServer() {
   // API Route to check device status (polling from Android App)
   app.get("/api/devices/:deviceId/status", async (req, res) => {
     const { deviceId } = req.params;
+    const requestedGroupId = (req.query.groupId || req.query.selectedGroupId) as string | undefined;
     
     try {
       const docRef = doc(db, "devices", deviceId);
@@ -147,44 +208,21 @@ async function startServer() {
       });
 
       const data = docSnap.data();
-      let token = undefined;
-      let roomName = `room-${deviceId}`;
-      let channelName = "Utama";
-
-      if (data.groupId) {
-        const groupRef = doc(db, "groups", data.groupId);
-        const groupSnap = await getDoc(groupRef);
-        if (groupSnap.exists()) {
-          const groupData = groupSnap.data();
-          roomName = `group-${data.groupId}`;
-          channelName = groupData.name || "Tanpa Nama";
-        } else {
-          roomName = `group-${data.groupId}`;
-          channelName = "Grup Tidak Dikenal";
-        }
-      }
-
-      if (data.isActive) {
-        const apiKey = process.env.LIVEKIT_API_KEY || "dev-key";
-        const apiSecret = process.env.LIVEKIT_API_SECRET || "dev-secret";
-        const at = new AccessToken(apiKey, apiSecret, {
-          identity: `device-${deviceId}`,
-        });
-        at.addGrant({ roomJoin: true, room: roomName });
-        token = await at.toJwt();
-      }
+      const resolved = await resolveDeviceGroups(data, deviceId, requestedGroupId);
 
       res.json({
         deviceId,
         isActive: data.isActive,
         assignedServerUrl: data.assignedServerUrl || "",
         activationCode: data.activationCode,
-        groupId: data.groupId || "",
+        groupId: resolved.primaryGroupId,
+        groupIds: resolved.groupIds,
+        groups: resolved.groups,
         name: data.name || "",
-        groupName: channelName,
-        channelName: channelName,
-        roomName: roomName,
-        ...(token && { token })
+        groupName: resolved.channelName,
+        channelName: resolved.channelName,
+        roomName: resolved.roomName,
+        ...(resolved.mainToken && { token: resolved.mainToken })
       });
     } catch (error) {
       console.error("Error fetching device status:", error);

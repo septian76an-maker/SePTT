@@ -4,6 +4,7 @@ export interface Device {
   isActive: boolean;
   assignedServerUrl: string;
   groupId?: string;
+  groupIds?: string[];
   name?: string;
   createdAt: Date;
   activatedAt?: Date;
