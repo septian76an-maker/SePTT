@@ -66,7 +66,10 @@ async function startServer() {
       let groupToken: string | undefined = undefined;
       if (data.isActive) {
         try {
-          const at = new AccessToken(apiKey, apiSecret, { identity: `device-${deviceId}` });
+          const at = new AccessToken(apiKey, apiSecret, { 
+            identity: `device-${deviceId}`,
+            name: data.name || `Device ${deviceId}`
+          });
           at.addGrant({ roomJoin: true, room: roomName });
           groupToken = await at.toJwt();
         } catch (e) {
@@ -105,7 +108,10 @@ async function startServer() {
     let mainToken: string | undefined = undefined;
     if (data.isActive) {
       try {
-        const at = new AccessToken(apiKey, apiSecret, { identity: `device-${deviceId}` });
+        const at = new AccessToken(apiKey, apiSecret, { 
+          identity: `device-${deviceId}`,
+          name: data.name || `Device ${deviceId}`
+        });
         at.addGrant({ roomJoin: true, room: roomName });
         mainToken = await at.toJwt();
       } catch (e) {
